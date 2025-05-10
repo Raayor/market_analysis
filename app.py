@@ -38,6 +38,13 @@ if st.button("🔍 Analisis Sekarang"):
         st.subheader(f"📈 {symbol}")
         data = yf.download(symbol, start=start_date, end=end_date)
 
+        data.dropna(inplace=True)
+
+        # Hanya lanjutkan kalau data tidak kosong
+        if data.empty:
+            st.warning(f"⚠️ Data untuk {symbol} kosong. Coba simbol lain atau ubah tanggal.")
+            continue
+
         # Hitung indikator teknikal
         data['SMA20'] = data['Close'].rolling(window=20).mean()
         data['SMA50'] = data['Close'].rolling(window=50).mean()
