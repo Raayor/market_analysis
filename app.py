@@ -30,35 +30,41 @@ st.title("📊 Analisis Saham & Crypto + Notifikasi Email")
 symbols = st.text_input("Simbol saham/crypto (pisahkan koma)", "AAPL,TSLA,BTC-USD")
 email = st.text_input("Email kamu (opsional untuk notifikasi)", "")
 start_date = st.date_input("Tanggal mulai", pd.to_datetime("2023-01-01"))
-end_date = st.date_input("Tanggal akhir", pd.to_datetime("2025-01-01"))
+max_date = pd.to_datetime("today") - pd.Timedelta(days=1)
+end_date = st.date_input("Tanggal akhir", value=max_date, max_value=max_date)
 
 if st.button("🔍 Analisis Sekarang"):
     symbols = [sym.strip().upper() for sym in symbols.split(",")]
     for symbol in symbols:
         st.subheader(f"📈 {symbol}")
-        data = yf.download(symbol, start=start_date, end=end_date)
 
-        # Validasi dasar
-        if data is None or data.empty or 'Close' not in data.columns:
-            st.warning(f"⚠️ Tidak ada data valid untuk {symbol}. Coba simbol atau tanggal lain.")
+        try:
+            data = yf.download(symbol, start=start_date, end=end_date)
+        except Exception as e:
+            st.error(f"❌ Gagal mengunduh data {symbol}: {e}")
+            continue
+
+        # Validasi awal
+        if data is None or data.empty:
+            st.warning(f"⚠️ Data dari Yahoo Finance untuk {symbol} kosong. Coba ubah tanggal.")
+            continue
+        if 'Close' not in data.columns:
+            st.warning(f"⚠️ Data {symbol} tidak mengandung kolom 'Close'.")
             continue
 
         required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
         if not all(col in data.columns for col in required_cols):
-            st.warning(f"⚠️ Data untuk {symbol} tidak memiliki semua kolom yang dibutuhkan.")
+            st.warning(f"⚠️ Data {symbol} tidak lengkap. Kolom penting tidak tersedia.")
             continue
 
-        # Ambil dan bersihkan data
+        # Bersihkan dan validasi nilai
         data = data[required_cols].copy()
         data.dropna(inplace=True)
-
-        # Konversi 'Close' ke numerik dengan aman
         try:
             data['Close'] = pd.to_numeric(data['Close'], errors='coerce')
         except Exception:
             st.warning(f"⚠️ Kolom 'Close' untuk {symbol} tidak bisa diproses.")
             continue
-
         if data.empty or data['Close'].isnull().all():
             st.warning(f"⚠️ Semua nilai 'Close' untuk {symbol} kosong atau tidak valid.")
             continue
@@ -73,7 +79,7 @@ if st.button("🔍 Analisis Sekarang"):
         data['BB_upper'] = bb.bollinger_hband()
         data['BB_lower'] = bb.bollinger_lband()
 
-        # Visualisasi chart
+        # Visualisasi
         fig, ax = plt.subplots(figsize=(10, 4))
         ax.plot(data['Close'], label='Harga', color='black')
         ax.plot(data['SMA20'], label='SMA20')
@@ -102,7 +108,7 @@ if st.button("🔍 Analisis Sekarang"):
         st.markdown(f"**RSI:** {latest['RSI']:.2f} ({rsi_status})")
         st.markdown(f"**MACD:** {latest['MACD']:.2f}")
 
-        # Kirim email jika diminta
+        # Notifikasi email
         if email and ("BUY" in signal or "SELL" in signal):
             subject = f"[{symbol}] {signal}"
             message = f"Harga: {latest['Close']:.2f}\nRSI: {latest['RSI']:.2f} ({rsi_status})\nSinyal: {signal}"
