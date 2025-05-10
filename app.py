@@ -2,7 +2,6 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import matplotlib.pyplot as plt
-import ta
 import smtplib
 import os
 from dotenv import load_dotenv
@@ -25,95 +24,52 @@ def send_email(subject, message, receiver_email):
         smtp.send_message(msg)
 
 # --- Streamlit UI ---
-st.title("📊 Analisis Saham & Crypto + Notifikasi Email")
+st.title("📈 Analisis Harga Saham & Crypto Sederhana + Notifikasi Email")
 
 symbols = st.text_input("Simbol saham/crypto (pisahkan koma)", "AAPL,TSLA,BTC-USD")
-email = st.text_input("Email kamu (opsional untuk notifikasi)", "")
+email = st.text_input("Email untuk notifikasi (opsional)", "")
 start_date = st.date_input("Tanggal mulai", pd.to_datetime("2023-01-01"))
 max_date = pd.to_datetime("today") - pd.Timedelta(days=1)
 end_date = st.date_input("Tanggal akhir", value=max_date, max_value=max_date)
 
 if st.button("🔍 Analisis Sekarang"):
-    symbols = [sym.strip().upper() for sym in symbols.split(",")]
+    symbols = [s.strip().upper() for s in symbols.split(",")]
     for symbol in symbols:
-        st.subheader(f"📈 {symbol}")
+        st.subheader(f"📊 {symbol}")
 
         try:
             data = yf.download(symbol, start=start_date, end=end_date)
         except Exception as e:
-            st.error(f"❌ Gagal mengunduh data {symbol}: {e}")
+            st.error(f"❌ Gagal mengambil data untuk {symbol}: {e}")
             continue
 
-        # Validasi awal
-        if data is None or data.empty:
-            st.warning(f"⚠️ Data dari Yahoo Finance untuk {symbol} kosong. Coba ubah tanggal.")
-            continue
-        if 'Close' not in data.columns:
-            st.warning(f"⚠️ Data {symbol} tidak mengandung kolom 'Close'.")
+        if data.empty or 'Close' not in data.columns:
+            st.warning(f"⚠️ Data untuk {symbol} kosong atau tidak valid.")
             continue
 
-        required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
-        if not all(col in data.columns for col in required_cols):
-            st.warning(f"⚠️ Data {symbol} tidak lengkap. Kolom penting tidak tersedia.")
-            continue
-
-        # Bersihkan dan validasi nilai
-        data = data[required_cols].copy()
-        data.dropna(inplace=True)
-        try:
-            data['Close'] = pd.to_numeric(data['Close'], errors='coerce')
-        except Exception:
-            st.warning(f"⚠️ Kolom 'Close' untuk {symbol} tidak bisa diproses.")
-            continue
-        if data.empty or data['Close'].isnull().all():
-            st.warning(f"⚠️ Semua nilai 'Close' untuk {symbol} kosong atau tidak valid.")
-            continue
-
-        # Hitung indikator teknikal
-        data['SMA20'] = data['Close'].rolling(window=20).mean()
-        data['SMA50'] = data['Close'].rolling(window=50).mean()
-        data['RSI'] = ta.momentum.RSIIndicator(close=data['Close']).rsi()
-        data['MACD'] = ta.trend.macd_diff(data['Close'])
-
-        bb = ta.volatility.BollingerBands(close=data['Close'])
-        data['BB_upper'] = bb.bollinger_hband()
-        data['BB_lower'] = bb.bollinger_lband()
-
-        # Visualisasi
+        # Plot harga penutupan
         fig, ax = plt.subplots(figsize=(10, 4))
-        ax.plot(data['Close'], label='Harga', color='black')
-        ax.plot(data['SMA20'], label='SMA20')
-        ax.plot(data['SMA50'], label='SMA50')
-        ax.plot(data['BB_upper'], linestyle='--', color='gray', alpha=0.5)
-        ax.plot(data['BB_lower'], linestyle='--', color='gray', alpha=0.5)
-        ax.set_title(f"{symbol} Chart")
+        ax.plot(data['Close'], label='Harga Penutupan', color='blue')
+        ax.set_title(f"Harga Penutupan {symbol}")
+        ax.set_xlabel("Tanggal")
+        ax.set_ylabel("Harga")
         ax.legend()
         st.pyplot(fig)
 
-        # Analisis sinyal
-        latest = data.iloc[-1]
-        signal = "⏸ Normal"
-        if latest['SMA20'] > latest['SMA50']:
-            signal = "🟢 BUY (Golden Cross)"
-        elif latest['SMA20'] < latest['SMA50']:
-            signal = "🔴 SELL (Death Cross)"
+        # Deteksi pergerakan harga
+        latest = data['Close'].iloc[-1]
+        prev = data['Close'].iloc[-2] if len(data) > 1 else latest
+        direction = "⬆️ Naik" if latest > prev else "⬇️ Turun" if latest < prev else "⏸ Stabil"
 
-        rsi_status = "Normal"
-        if latest['RSI'] > 70:
-            rsi_status = "⚠️ Overbought"
-        elif latest['RSI'] < 30:
-            rsi_status = "✅ Oversold"
+        st.markdown(f"**Harga Terakhir:** ${latest:.2f}")
+        st.markdown(f"**Pergerakan:** {direction}")
 
-        st.markdown(f"**Sinyal:** {signal}")
-        st.markdown(f"**RSI:** {latest['RSI']:.2f} ({rsi_status})")
-        st.markdown(f"**MACD:** {latest['MACD']:.2f}")
-
-        # Notifikasi email
-        if email and ("BUY" in signal or "SELL" in signal):
-            subject = f"[{symbol}] {signal}"
-            message = f"Harga: {latest['Close']:.2f}\nRSI: {latest['RSI']:.2f} ({rsi_status})\nSinyal: {signal}"
+        # Kirim notifikasi
+        if email:
+            subject = f"{symbol} {direction}"
+            message = f"Harga terakhir {symbol}: ${latest:.2f}\nPergerakan hari ini: {direction}"
             try:
                 send_email(subject, message, email)
-                st.success(f"📧 Email notifikasi dikirim ke {email}")
+                st.success(f"📧 Notifikasi dikirim ke {email}")
             except Exception as e:
-                st.error(f"Gagal mengirim email: {e}")
+                st.error(f"❌ Gagal kirim email: {e}")
