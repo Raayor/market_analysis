@@ -77,14 +77,26 @@ if st.button("🔍 Analisis Sekarang"):
                     direction = "⬇️ Turun"
                 else:
                     direction = "⏸ Stabil"
+
+                change_pct = ((latest - prev) / prev) * 100
+                if change_pct > 2:
+                    rekomendasi = "🔼 BUY — Harga naik >2%, potensi tren naik"
+                elif change_pct < -2:
+                    rekomendasi = "🔽 SELL — Harga turun >2%, waspadai koreksi"
+                else:
+                    rekomendasi = "⏸ HOLD — Perubahan <2%, belum signifikan"
+                
             else:
                 direction = "🔹 Data terlalu sedikit untuk analisis"
+                rekomendasi = "ℹ️ Tidak cukup data untuk rekomendasi"
         except Exception as e:
             st.warning(f"⚠️ Gagal membaca harga penutupan untuk {symbol}: {e}")
             continue
 
         st.markdown(f"**Harga Terakhir:** ${latest:.2f}")
         st.markdown(f"**Pergerakan:** {direction}")
+        st.markdown(f"**Rekomendasi:** {rekomendasi}")
+
 
         # Kirim email jika diperlukan
         if email and "Data terlalu sedikit" not in direction:
