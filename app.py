@@ -7,7 +7,7 @@ import os
 from dotenv import load_dotenv
 from email.mime.text import MIMEText
 
-# --- Load kredensial dari .env atau Streamlit Secrets ---
+# --- Load kredensial dari environment ---
 load_dotenv()
 SENDER_EMAIL = os.getenv("EMAIL_SENDER", st.secrets.get("EMAIL_SENDER", ""))
 EMAIL_PASS = os.getenv("EMAIL_PASSWORD", st.secrets.get("EMAIL_PASSWORD", ""))
@@ -24,10 +24,10 @@ def send_email(subject, message, receiver_email):
         smtp.send_message(msg)
 
 # --- Streamlit UI ---
-st.title("📈 Analisis Sederhana Saham & Crypto + Notifikasi Email")
+st.title("💹 Analisis Pergerakan Harga Crypto + Email Notifikasi")
 
-symbols = st.text_input("Simbol saham/crypto (pisahkan koma)", "AAPL,TSLA,BTC-USD")
-email = st.text_input("Email kamu (opsional)", "")
+symbols = st.text_input("Masukkan simbol crypto (contoh: BTC-USD, ETH-USD)", "BTC-USD,ETH-USD")
+email = st.text_input("Email untuk notifikasi (opsional)", "")
 start_date = st.date_input("Tanggal mulai", pd.to_datetime("2023-01-01"))
 max_date = pd.to_datetime("today") - pd.Timedelta(days=1)
 end_date = st.date_input("Tanggal akhir", value=max_date, max_value=max_date)
@@ -35,7 +35,12 @@ end_date = st.date_input("Tanggal akhir", value=max_date, max_value=max_date)
 if st.button("🔍 Analisis Sekarang"):
     symbols = [s.strip().upper() for s in symbols.split(",")]
     for symbol in symbols:
-        st.subheader(f"📊 {symbol}")
+        st.subheader(f"📈 {symbol}")
+
+        # Validasi simbol: hanya izinkan yang berakhiran -USD
+        if not symbol.endswith("-USD"):
+            st.warning(f"⚠️ {symbol} bukan simbol crypto valid (harus diakhiri -USD).")
+            continue
 
         try:
             data = yf.download(symbol, start=start_date, end=end_date)
@@ -44,7 +49,7 @@ if st.button("🔍 Analisis Sekarang"):
             continue
 
         if data.empty or 'Close' not in data.columns:
-            st.warning(f"⚠️ Data untuk {symbol} kosong atau tidak valid.")
+            st.warning(f"⚠️ Data kosong atau tidak valid untuk {symbol}.")
             continue
 
         # Plot harga penutupan
@@ -52,36 +57,38 @@ if st.button("🔍 Analisis Sekarang"):
         ax.plot(data['Close'], label='Harga Penutupan', color='blue')
         ax.set_title(f"Harga Penutupan {symbol}")
         ax.set_xlabel("Tanggal")
-        ax.set_ylabel("Harga")
+        ax.set_ylabel("Harga (USD)")
         ax.legend()
         st.pyplot(fig)
 
-        # Deteksi pergerakan harga dengan validasi panjang data
-        try:
-            latest = data['Close'].iloc[-1]
-            if len(data['Close']) >= 2:
-                prev = data['Close'].iloc[-2]
-                if latest > prev:
-                    direction = "⬆️ Naik"
-                elif latest < prev:
-                    direction = "⬇️ Turun"
-                else:
-                    direction = "⏸ Stabil"
-            else:
-                direction = "🔹 Data terlalu sedikit untuk analisis"
-        except Exception:
-            st.warning(f"⚠️ Tidak bisa membaca harga penutupan terakhir untuk {symbol}")
+        # Deteksi naik/turun dari data yang sudah dibersihkan
+        clean_close = data['Close'].dropna()
+
+        if clean_close.empty:
+            st.warning(f"⚠️ Tidak ada data harga valid untuk {symbol}.")
             continue
+
+        latest = clean_close.iloc[-1]
+        if len(clean_close) >= 2:
+            prev = clean_close.iloc[-2]
+            if latest > prev:
+                direction = "⬆️ Naik"
+            elif latest < prev:
+                direction = "⬇️ Turun"
+            else:
+                direction = "⏸ Stabil"
+        else:
+            direction = "🔹 Data terlalu sedikit untuk analisis"
 
         st.markdown(f"**Harga Terakhir:** ${latest:.2f}")
         st.markdown(f"**Pergerakan:** {direction}")
 
-        # Notifikasi email
+        # Kirim email kalau ada pergerakan signifikan
         if email and "Data terlalu sedikit" not in direction:
-            subject = f"[{symbol}] Update Harga"
-            message = f"Harga terakhir {symbol}: ${latest:.2f}\nPergerakan: {direction}"
+            subject = f"[{symbol}] {direction}"
+            message = f"Harga terakhir {symbol}: ${latest:.2f}\nStatus: {direction}"
             try:
                 send_email(subject, message, email)
-                st.success(f"📧 Email dikirim ke {email}")
+                st.success(f"📧 Notifikasi dikirim ke {email}")
             except Exception as e:
-                st.error(f"❌ Gagal mengirim email: {e}")
+                st.error(f"❌ Gagal kirim email: {e}")
