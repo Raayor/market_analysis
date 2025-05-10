@@ -38,35 +38,28 @@ if st.button("🔍 Analisis Sekarang"):
         st.subheader(f"📈 {symbol}")
         data = yf.download(symbol, start=start_date, end=end_date)
 
-        # Validasi data
+        # Validasi dasar
         if data is None or data.empty or 'Close' not in data.columns:
             st.warning(f"⚠️ Tidak ada data valid untuk {symbol}. Coba simbol atau tanggal lain.")
             continue
 
-        # Ambil hanya kolom yang dibutuhkan jika semuanya tersedia
         required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
         if not all(col in data.columns for col in required_cols):
             st.warning(f"⚠️ Data untuk {symbol} tidak memiliki semua kolom yang dibutuhkan.")
             continue
 
-        # Ambil dan bersihkan
+        # Ambil dan bersihkan data
         data = data[required_cols].copy()
         data.dropna(inplace=True)
 
-        # Pastikan 'Close' valid numerik
-        if isinstance(data['Close'], pd.Series):
+        # Konversi 'Close' ke numerik dengan aman
+        try:
             data['Close'] = pd.to_numeric(data['Close'], errors='coerce')
-        else:
-            st.warning(f"⚠️ Kolom 'Close' untuk {symbol} tidak valid.")
+        except Exception:
+            st.warning(f"⚠️ Kolom 'Close' untuk {symbol} tidak bisa diproses.")
             continue
 
-        # Periksa ulang
         if data.empty or data['Close'].isnull().all():
-            st.warning(f"⚠️ Data harga penutupan {symbol} tidak bisa digunakan.")
-            continue
-
-
-        if data['Close'].isnull().all():
             st.warning(f"⚠️ Semua nilai 'Close' untuk {symbol} kosong atau tidak valid.")
             continue
 
