@@ -8,10 +8,10 @@ import os
 from dotenv import load_dotenv
 from email.mime.text import MIMEText
 
-# --- Load kredensial dari .env ---
+# --- Load kredensial dari .env atau Streamlit Secrets ---
 load_dotenv()
-SENDER_EMAIL = os.getenv("EMAIL_SENDER")
-EMAIL_PASS = os.getenv("EMAIL_PASSWORD")
+SENDER_EMAIL = os.getenv("EMAIL_SENDER", st.secrets.get("EMAIL_SENDER", ""))
+EMAIL_PASS = os.getenv("EMAIL_PASSWORD", st.secrets.get("EMAIL_PASSWORD", ""))
 
 # --- Fungsi kirim email ---
 def send_email(subject, message, receiver_email):
@@ -38,11 +38,16 @@ if st.button("🔍 Analisis Sekarang"):
         st.subheader(f"📈 {symbol}")
         data = yf.download(symbol, start=start_date, end=end_date)
 
-        data.dropna(inplace=True)
+        # Validasi data
+        if data is None or data.empty or 'Close' not in data.columns:
+            st.warning(f"⚠️ Tidak ada data valid untuk {symbol}. Coba simbol atau tanggal lain.")
+            continue
 
-        # Hanya lanjutkan kalau data tidak kosong
-        if data.empty:
-            st.warning(f"⚠️ Data untuk {symbol} kosong. Coba simbol lain atau ubah tanggal.")
+        data = data[['Open', 'High', 'Low', 'Close', 'Volume']].dropna()
+        data['Close'] = pd.to_numeric(data['Close'], errors='coerce')
+
+        if data['Close'].isnull().all():
+            st.warning(f"⚠️ Semua nilai 'Close' untuk {symbol} kosong atau tidak valid.")
             continue
 
         # Hitung indikator teknikal
