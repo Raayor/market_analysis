@@ -7,7 +7,7 @@ import os
 from dotenv import load_dotenv
 from email.mime.text import MIMEText
 
-# --- Load kredensial dari environment ---
+# --- Load kredensial dari .env atau secrets ---
 load_dotenv()
 SENDER_EMAIL = os.getenv("EMAIL_SENDER", st.secrets.get("EMAIL_SENDER", ""))
 EMAIL_PASS = os.getenv("EMAIL_PASSWORD", st.secrets.get("EMAIL_PASSWORD", ""))
@@ -24,10 +24,10 @@ def send_email(subject, message, receiver_email):
         smtp.send_message(msg)
 
 # --- Streamlit UI ---
-st.title("💹 Analisis Pergerakan Harga Crypto + Email Notifikasi")
+st.title("💹 Analisis Harga Crypto + Notifikasi Email")
 
 symbols = st.text_input("Masukkan simbol crypto (contoh: BTC-USD, ETH-USD)", "BTC-USD,ETH-USD")
-email = st.text_input("Email untuk notifikasi (opsional)", "")
+email = st.text_input("Email kamu (opsional)", "")
 start_date = st.date_input("Tanggal mulai", pd.to_datetime("2023-01-01"))
 max_date = pd.to_datetime("today") - pd.Timedelta(days=1)
 end_date = st.date_input("Tanggal akhir", value=max_date, max_value=max_date)
@@ -37,7 +37,7 @@ if st.button("🔍 Analisis Sekarang"):
     for symbol in symbols:
         st.subheader(f"📈 {symbol}")
 
-        # Validasi simbol: hanya izinkan yang berakhiran -USD
+        # Validasi hanya simbol crypto (akhiran -USD)
         if not symbol.endswith("-USD"):
             st.warning(f"⚠️ {symbol} bukan simbol crypto valid (harus diakhiri -USD).")
             continue
@@ -52,7 +52,7 @@ if st.button("🔍 Analisis Sekarang"):
             st.warning(f"⚠️ Data kosong atau tidak valid untuk {symbol}.")
             continue
 
-        # Plot harga penutupan
+        # Visualisasi harga
         fig, ax = plt.subplots(figsize=(10, 4))
         ax.plot(data['Close'], label='Harga Penutupan', color='blue')
         ax.set_title(f"Harga Penutupan {symbol}")
@@ -61,29 +61,32 @@ if st.button("🔍 Analisis Sekarang"):
         ax.legend()
         st.pyplot(fig)
 
-        # Deteksi naik/turun dari data yang sudah dibersihkan
+        # Deteksi pergerakan
         clean_close = data['Close'].dropna()
-
         if clean_close.empty:
             st.warning(f"⚠️ Tidak ada data harga valid untuk {symbol}.")
             continue
 
-        latest = clean_close.iloc[-1]
-        if len(clean_close) >= 2:
-            prev = clean_close.iloc[-2]
-            if latest > prev:
-                direction = "⬆️ Naik"
-            elif latest < prev:
-                direction = "⬇️ Turun"
+        try:
+            latest = float(clean_close.iloc[-1])
+            if len(clean_close) >= 2:
+                prev = float(clean_close.iloc[-2])
+                if latest > prev:
+                    direction = "⬆️ Naik"
+                elif latest < prev:
+                    direction = "⬇️ Turun"
+                else:
+                    direction = "⏸ Stabil"
             else:
-                direction = "⏸ Stabil"
-        else:
-            direction = "🔹 Data terlalu sedikit untuk analisis"
+                direction = "🔹 Data terlalu sedikit untuk analisis"
+        except Exception as e:
+            st.warning(f"⚠️ Gagal membaca harga penutupan untuk {symbol}: {e}")
+            continue
 
         st.markdown(f"**Harga Terakhir:** ${latest:.2f}")
         st.markdown(f"**Pergerakan:** {direction}")
 
-        # Kirim email kalau ada pergerakan signifikan
+        # Kirim email jika diperlukan
         if email and "Data terlalu sedikit" not in direction:
             subject = f"[{symbol}] {direction}"
             message = f"Harga terakhir {symbol}: ${latest:.2f}\nStatus: {direction}"
