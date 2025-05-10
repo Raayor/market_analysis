@@ -24,10 +24,10 @@ def send_email(subject, message, receiver_email):
         smtp.send_message(msg)
 
 # --- Streamlit UI ---
-st.title("📈 Analisis Harga Saham & Crypto Sederhana + Notifikasi Email")
+st.title("📈 Analisis Sederhana Saham & Crypto + Notifikasi Email")
 
 symbols = st.text_input("Simbol saham/crypto (pisahkan koma)", "AAPL,TSLA,BTC-USD")
-email = st.text_input("Email untuk notifikasi (opsional)", "")
+email = st.text_input("Email kamu (opsional)", "")
 start_date = st.date_input("Tanggal mulai", pd.to_datetime("2023-01-01"))
 max_date = pd.to_datetime("today") - pd.Timedelta(days=1)
 end_date = st.date_input("Tanggal akhir", value=max_date, max_value=max_date)
@@ -56,20 +56,32 @@ if st.button("🔍 Analisis Sekarang"):
         ax.legend()
         st.pyplot(fig)
 
-        # Deteksi pergerakan harga
-        latest = data['Close'].iloc[-1]
-        prev = data['Close'].iloc[-2] if len(data) > 1 else latest
-        direction = "⬆️ Naik" if latest > prev else "⬇️ Turun" if latest < prev else "⏸ Stabil"
+        # Deteksi pergerakan harga dengan validasi panjang data
+        try:
+            latest = data['Close'].iloc[-1]
+            if len(data['Close']) >= 2:
+                prev = data['Close'].iloc[-2]
+                if latest > prev:
+                    direction = "⬆️ Naik"
+                elif latest < prev:
+                    direction = "⬇️ Turun"
+                else:
+                    direction = "⏸ Stabil"
+            else:
+                direction = "🔹 Data terlalu sedikit untuk analisis"
+        except Exception:
+            st.warning(f"⚠️ Tidak bisa membaca harga penutupan terakhir untuk {symbol}")
+            continue
 
         st.markdown(f"**Harga Terakhir:** ${latest:.2f}")
         st.markdown(f"**Pergerakan:** {direction}")
 
-        # Kirim notifikasi
-        if email:
-            subject = f"{symbol} {direction}"
-            message = f"Harga terakhir {symbol}: ${latest:.2f}\nPergerakan hari ini: {direction}"
+        # Notifikasi email
+        if email and "Data terlalu sedikit" not in direction:
+            subject = f"[{symbol}] Update Harga"
+            message = f"Harga terakhir {symbol}: ${latest:.2f}\nPergerakan: {direction}"
             try:
                 send_email(subject, message, email)
-                st.success(f"📧 Notifikasi dikirim ke {email}")
+                st.success(f"📧 Email dikirim ke {email}")
             except Exception as e:
-                st.error(f"❌ Gagal kirim email: {e}")
+                st.error(f"❌ Gagal mengirim email: {e}")
